@@ -9,6 +9,3 @@ def load_and_clean_data(file_path):
     data = data.dropna()
     
     return data
-
-
-print(load_and_clean_data(r"data\alzheimers_disease_data.csv"))
