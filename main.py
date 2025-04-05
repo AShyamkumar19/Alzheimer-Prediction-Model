@@ -1,6 +1,7 @@
+from sklearn.metrics import mean_absolute_error
 from utils.preprocessing import load_and_clean_data, preprocess_data, split_data
-from models.training import train_models, evaluate_models, show_feature_importance, shap_explanation
-from app.predictor import predict_diagnosis_and_mmse
+from models.training import train_models, evaluate_models, show_feature_importance, shap_explanation, hybrid_rf_xgb_pipeline, hybrid_xgb_rf_pipeline
+from app.predictor import predict_diagnosis_and_mmse, predict_mmse_hybrid, predict_mmse_xgb_rf
 
 # Load and preprocess
 df = load_and_clean_data("data/alzheimers_disease_data.csv")
@@ -23,3 +24,23 @@ shap_explanation(xgb_clf, Xc_test[:200])
 sample = Xc_test.iloc[0]
 prediction = predict_diagnosis_and_mmse(xgb_clf, xgb_reg, sample)
 print(f"\nAgent Prediction for Sample Patient:\nDiagnosis = {'Alzheimer\'s' if prediction[0] else 'No Alzheimer\'s'}\nMMSE Score = {round(prediction[1], 2)}")
+
+# Hybrid RF-XGB pipeline
+hybrid_model, hybrid_feats = hybrid_rf_xgb_pipeline(Xr_train, yr_train, Xr_test, yr_test)
+
+# Evaluate hybrid model
+hybrid_model_rf_xgb, hybrid_feats_rf_xgb = hybrid_rf_xgb_pipeline(Xr_train, yr_train, Xr_test, yr_test)
+hybrid_sample_rf_xgb = Xr_test.iloc[0]
+hybrid_mmse_rf_xgb = predict_mmse_hybrid(hybrid_model_rf_xgb, hybrid_feats_rf_xgb, hybrid_sample_rf_xgb)
+print(f"\nHybrid RF->XGB MMSE Prediction for Sample Patient: {round(hybrid_mmse_rf_xgb, 2)}")
+Xr_test_reduced_rf_xgb = Xr_test[hybrid_feats_rf_xgb]
+print("[Evaluation] RF->XGB Full Test Set MAE:", mean_absolute_error(yr_test, hybrid_model_rf_xgb.predict(Xr_test_reduced_rf_xgb)))
+
+# Hybrid XGB -> RF
+hybrid_model_xgb_rf, hybrid_feats_xgb_rf = hybrid_xgb_rf_pipeline(Xr_train, yr_train, Xr_test, yr_test)
+hybrid_sample_xgb_rf = Xr_test.iloc[0]
+hybrid_mmse_xgb_rf = predict_mmse_xgb_rf(hybrid_model_xgb_rf, hybrid_feats_xgb_rf, hybrid_sample_xgb_rf)
+print(f"\nHybrid XGB->RF MMSE Prediction for Sample Patient: {round(hybrid_mmse_xgb_rf, 2)}")
+Xr_test_reduced_xgb_rf = Xr_test[hybrid_feats_xgb_rf]
+print("[Evaluation] XGB->RF Full Test Set MAE:", mean_absolute_error(yr_test, hybrid_model_xgb_rf.predict(Xr_test_reduced_xgb_rf)))
+

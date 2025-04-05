@@ -7,8 +7,8 @@ def load_and_clean_data(file_path):
     data = pd.read_csv(file_path)
     
     # Handle missing values
-    data = data.drop(columns=["DoctorInCharge"])
-    data = data.dropna()
+    data = data.drop(columns=["PatientID", "DoctorInCharge"])
+    data = data.dropna()    
     
     return data
 
