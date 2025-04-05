@@ -1,10 +1,10 @@
-from utils.preprocessing import load_and_clean_data, preprocess_features, split_data
+from utils.preprocessing import load_and_clean_data, preprocess_data, split_data
 from models.training import train_models, evaluate_models, show_feature_importance, shap_explanation
 from app.predictor import predict_diagnosis_and_mmse
 
 # Load and preprocess
-df = load_and_clean_data("../data/alzheimers_disease_data.csv")
-X, y_class, y_reg, scaler = preprocess_features(df)
+df = load_and_clean_data("data/alzheimers_disease_data.csv")
+X, y_class, y_reg, scaler = preprocess_data(df)
 Xc_train, Xc_test, yc_train, yc_test, Xr_train, Xr_test, yr_train, yr_test = split_data(X, y_class, y_reg)
 
 # Train models

@@ -18,7 +18,7 @@ def preprocess_data(data):
     y_diagnosis = data["Diagnosis"]
     y_mmse = data["MMSE"]
     X_scaled = scaler.fit_transform(X)
-    return pd.DataFrame(X_scaled, columns=X.columns), y_diagnosis, y_mmse
+    return pd.DataFrame(X_scaled, columns=X.columns), y_diagnosis, y_mmse, scaler
 
 def split_data(X, y_diagnosis, y_mmse):
     Xd_train, Xd_test, yd_train, yd_test = train_test_split(X, y_diagnosis, test_size=0.5, random_state=42)
