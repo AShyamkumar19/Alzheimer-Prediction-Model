@@ -1,4 +1,4 @@
-from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import mean_absolute_error, r2_score   
 from utils.preprocessing import load_and_clean_data, preprocess_data, split_data
 from models.training import train_models, evaluate_models, show_feature_importance, shap_explanation, hybrid_rf_xgb_pipeline, hybrid_xgb_rf_pipeline, save_model_artifacts
 from app.predictor import predict_diagnosis_and_mmse, predict_mmse_hybrid, predict_mmse_xgb_rf
@@ -26,15 +26,10 @@ show_feature_importance(xgb_clf, Xc_train)
 print("\nSHAP Summary Plot:")
 shap_explanation(xgb_clf, Xc_test[:200])  
 
-sample_patient_num = 9
-# Predict on a sample using XGBoost Model
-sample = Xc_test.iloc[sample_patient_num]
-prediction = predict_diagnosis_and_mmse(xgb_clf, xgb_reg, sample)
-print(f"\nAgent Prediction for Sample Patient:\nDiagnosis = {'Alzheimer\'s' if prediction[0] else 'No Alzheimer\'s'}\nMMSE Score = {round(prediction[1], 2)}")
-
-'''
-    Running RF and XGBoost Models and its hybrid 
-'''
+sample_patient_num = 3
+all_features = list(X.columns)
+sample_dict = dict(zip(all_features, Xc_test.iloc[sample_patient_num]))
+sample_df = pd.DataFrame([sample_dict])[all_features] 
 
 # # RF Model
 # print("\nRF Model")
@@ -42,9 +37,17 @@ print(f"\nAgent Prediction for Sample Patient:\nDiagnosis = {'Alzheimer\'s' if p
 # print(f"\nRF Model Prediction for Sample Patient:\nDiagnosis = {'Alzheimer\'s' if prediction_rf[0] else 'No Alzheimer\'s'}\nMMSE Score = {round(prediction_rf[1], 2)}")
 
 # Optimum Output
-print("\nOptimum Output")
-prediction_optimum = predict_diagnosis_and_mmse(xgb_clf, rf_reg, sample)
-print(f"\nOptimum Output Prediction for Sample Patient:\nDiagnosis = {'Alzheimer\'s' if prediction_optimum[0] else 'No Alzheimer\'s'}\nMMSE Score = {round(prediction_optimum[1], 2)}")
+optimum_output = predict_diagnosis_and_mmse(xgb_clf, xgb_reg, sample_df, scaler)
+print("\nGround truth MMSE from dataset:")
+print(f"Diagnosis = {'Alzheimer\'s' if optimum_output[0] else 'No Alzheimer\'s'}")
+print("Actual MMSE Score:", optimum_output[1])
+
+save_model_artifacts(rf_reg, xgb_reg, scaler)
+
+# Load models (optional redundancy)
+rf_reg = load("models/rf_reg.joblib")
+xgb_reg = load("models/xgb_reg.joblib")
+scaler = load("models/scaler.joblib")
 
 # # Hybrid RF-XGB pipeline
 # hybrid_model, hybrid_feats = hybrid_rf_xgb_pipeline(Xr_train, yr_train, Xr_test, yr_test)
@@ -66,22 +69,10 @@ print(f"\nOptimum Output Prediction for Sample Patient:\nDiagnosis = {'Alzheimer
 # Xr_test_reduced_xgb_rf = Xr_test[hybrid_feats_xgb_rf]
 # print("[Evaluation] XGB->RF Full Test Set MAE:", mean_absolute_error(yr_test, hybrid_model_xgb_rf.predict(Xr_test_reduced_xgb_rf)))
 
-print("\nGround truth MMSE from dataset:")
-print("Patient Features:\n", Xr_test.iloc[sample_patient_num])
-print("Actual MMSE Score:", yr_test.iloc[sample_patient_num])
-
 '''
     Now Running the RL Agent
 '''
 
-save_model_artifacts(rf_reg, xgb_reg, scaler)
-
-# Load the saved models (just in case but not needed)
-rf_reg = load("models/rf_reg.joblib")
-xgb_reg = load("models/xgb_reg.joblib")
-scaler = load("models/scaler.joblib")
-
-all_features = list(X.columns)
 sample_dict = dict(zip(all_features, Xc_test.iloc[sample_patient_num]))
 
 # Initial MMSE prediction (before agent acts)
@@ -95,13 +86,6 @@ env = MMSEEnv(model=xgb_reg, scaler=scaler, feature_names=all_features, initial_
 agent = QLearningAgent(actions=list(range(7)))
 
 print("Training the agent...")
-# for episode in range(1000):
-#     state = env.reset(sample_dict)
-#     action = agent.choose_action(state)
-#     next_state, reward, done = env.step(action)
-#     agent.learn(state, action, reward, next_state)
-#print("Training complete!")
-
 for episode in range(1000):
     state = env.reset(sample_dict)
     done = False
@@ -125,23 +109,22 @@ state_key = agent.get_state_key(sample_dict)
 q_values = agent.q_table[state_key]
 
 # Get top-k actions
-k = 3  # you can change this to show more or fewer
-top_actions = np.argsort(q_values)[::-1][:k]
+top_k = 3  # you can change this to show more or fewer
+top_actions = np.argsort(q_values)[::-1][:top_k]
 
-print(f"\nTop {k} Recommended Actions and Expected MMSE Impact:")
+initial_df = pd.DataFrame([sample_dict])[all_features]
+initial_scaled = scaler.transform(initial_df)
+initial_mmse = xgb_reg.predict(initial_scaled)[0] # can be changed to rf_reg.predict(initial_scaled)[0]
+
+print(f"\nInitial MMSE Prediction: {round(initial_mmse, 2)}")
+print(f"Top {top_k} Recommended Actions and Expected MMSE Impact:")
 
 for act in top_actions:
-    # Reset environment before simulating
     env.reset(sample_dict)
-    
-    # Apply selected action
-    _, reward, _ = env.step(act)
-    
-    # Get new MMSE after this action
+    _, _, _ = env.step(act)
     post_action_df = pd.DataFrame([env.state])[all_features]
     post_scaled = scaler.transform(post_action_df)
-    post_mmse = xgb_reg.predict(post_scaled)[0]  # can be changed to rf_reg.predict(post_scaled)[0]
-    
+    post_mmse = xgb_reg.predict(post_scaled)[0] # can be changed to rf_reg.predict(post_scaled)[0]
     print(f" -> {action_map[act]}:")
     print(f"     Predicted MMSE: {round(post_mmse, 2)}")
     print(f"     Change from baseline: {round(post_mmse - initial_mmse, 2)}")
