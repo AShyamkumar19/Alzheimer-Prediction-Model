@@ -1,6 +1,8 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import shap
+import os
+from joblib import dump
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from xgboost import XGBClassifier, XGBRegressor
 from sklearn.metrics import accuracy_score, roc_auc_score, mean_absolute_error, classification_report
@@ -76,3 +78,9 @@ def shap_explanation(model, X):
     explainer = shap.Explainer(model)
     shap_values = explainer(X)
     shap.summary_plot(shap_values, X)
+
+def save_model_artifacts(rf_reg, xgb_reg, scaler, output_dir="models"):
+    os.makedirs(output_dir, exist_ok=True)
+    dump(rf_reg, os.path.join(output_dir, "rf_reg.joblib"))
+    dump(xgb_reg, os.path.join(output_dir, "xgb_reg.joblib"))
+    dump(scaler, os.path.join(output_dir, "scaler.joblib"))
