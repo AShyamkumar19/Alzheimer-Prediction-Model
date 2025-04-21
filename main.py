@@ -3,6 +3,7 @@ from utils.preprocessing import load_and_clean_data, preprocess_data, split_data
 from models.training import train_models, evaluate_models, show_feature_importance, shap_explanation, hybrid_rf_xgb_pipeline, hybrid_xgb_rf_pipeline, save_model_artifacts
 from app.predictor import predict_diagnosis_and_mmse, predict_mmse_hybrid, predict_mmse_xgb_rf
 from RL_Agent.mmse_rl_agent import MMSEEnv, QLearningAgent
+import matplotlib.pyplot as plt
 from joblib import load
 import pandas as pd
 import numpy as np
@@ -26,10 +27,18 @@ show_feature_importance(xgb_clf, Xc_train)
 print("\nSHAP Summary Plot:")
 shap_explanation(xgb_clf, Xc_test[:200])  
 
-sample_patient_num = 3
+sample_patient_num = 8 # can be changed to any patient number
 all_features = list(X.columns)
 sample_dict = dict(zip(all_features, Xc_test.iloc[sample_patient_num]))
 sample_df = pd.DataFrame([sample_dict])[all_features] 
+
+sample = Xr_test.iloc[sample_patient_num]
+scaled_sample = scaler.transform([sample])
+pred_mmse = xgb_reg.predict(scaled_sample)[0]
+actual_mmse = yr_test.iloc[sample_patient_num]
+print("Predicted:", round(pred_mmse, 2))
+print("Actual:", round(actual_mmse, 2))
+print("MAE for this patient:", round(abs(pred_mmse - actual_mmse), 4))
 
 # # RF Model
 # print("\nRF Model")
@@ -52,22 +61,22 @@ scaler = load("models/scaler.joblib")
 # # Hybrid RF-XGB pipeline
 # hybrid_model, hybrid_feats = hybrid_rf_xgb_pipeline(Xr_train, yr_train, Xr_test, yr_test)
 
-# # Evaluate hybrid model
-# print("\nHybrid RF-XGB pipeline")
-# hybrid_model_rf_xgb, hybrid_feats_rf_xgb = hybrid_rf_xgb_pipeline(Xr_train, yr_train, Xr_test, yr_test)
-# hybrid_sample_rf_xgb = Xr_test.iloc[sample_patient_num]
-# hybrid_mmse_rf_xgb = predict_mmse_hybrid(hybrid_model_rf_xgb, hybrid_feats_rf_xgb, hybrid_sample_rf_xgb)
-# print(f"\nHybrid RF->XGB MMSE Prediction for Sample Patient: {round(hybrid_mmse_rf_xgb, 2)}")
-# Xr_test_reduced_rf_xgb = Xr_test[hybrid_feats_rf_xgb]
-# print("[Evaluation] RF->XGB Full Test Set MAE:", mean_absolute_error(yr_test, hybrid_model_rf_xgb.predict(Xr_test_reduced_rf_xgb)))
+# Evaluate hybrid model
+print("\nHybrid RF-XGB pipeline")
+hybrid_model_rf_xgb, hybrid_feats_rf_xgb = hybrid_rf_xgb_pipeline(Xr_train, yr_train, Xr_test, yr_test)
+hybrid_sample_rf_xgb = Xr_test.iloc[sample_patient_num]
+hybrid_mmse_rf_xgb = predict_mmse_hybrid(hybrid_model_rf_xgb, hybrid_feats_rf_xgb, hybrid_sample_rf_xgb)
+print(f"\nHybrid RF->XGB MMSE Prediction for Sample Patient: {round(hybrid_mmse_rf_xgb, 2)}")
+Xr_test_reduced_rf_xgb = Xr_test[hybrid_feats_rf_xgb]
+print("[Evaluation] RF->XGB Full Test Set MAE:", mean_absolute_error(yr_test, hybrid_model_rf_xgb.predict(Xr_test_reduced_rf_xgb)))
 
-# # Hybrid XGB -> RF
-# hybrid_model_xgb_rf, hybrid_feats_xgb_rf = hybrid_xgb_rf_pipeline(Xr_train, yr_train, Xr_test, yr_test)
-# hybrid_sample_xgb_rf = Xr_test.iloc[sample_patient_num]
-# hybrid_mmse_xgb_rf = predict_mmse_xgb_rf(hybrid_model_xgb_rf, hybrid_feats_xgb_rf, hybrid_sample_xgb_rf)
-# print(f"\nHybrid XGB->RF MMSE Prediction for Sample Patient: {round(hybrid_mmse_xgb_rf, 2)}")
-# Xr_test_reduced_xgb_rf = Xr_test[hybrid_feats_xgb_rf]
-# print("[Evaluation] XGB->RF Full Test Set MAE:", mean_absolute_error(yr_test, hybrid_model_xgb_rf.predict(Xr_test_reduced_xgb_rf)))
+# Hybrid XGB -> RF
+hybrid_model_xgb_rf, hybrid_feats_xgb_rf = hybrid_xgb_rf_pipeline(Xr_train, yr_train, Xr_test, yr_test)
+hybrid_sample_xgb_rf = Xr_test.iloc[sample_patient_num]
+hybrid_mmse_xgb_rf = predict_mmse_xgb_rf(hybrid_model_xgb_rf, hybrid_feats_xgb_rf, hybrid_sample_xgb_rf)
+print(f"\nHybrid XGB->RF MMSE Prediction for Sample Patient: {round(hybrid_mmse_xgb_rf, 2)}")
+Xr_test_reduced_xgb_rf = Xr_test[hybrid_feats_xgb_rf]
+print("[Evaluation] XGB->RF Full Test Set MAE:", mean_absolute_error(yr_test, hybrid_model_xgb_rf.predict(Xr_test_reduced_xgb_rf)))
 
 '''
     Now Running the RL Agent
@@ -82,7 +91,7 @@ initial_mmse = xgb_reg.predict(initial_scaled)[0] # can be changed to rf_reg.pre
 
 print("\nInitial MMSE Prediction (before action):", round(initial_mmse, 2))
 
-env = MMSEEnv(model=xgb_reg, scaler=scaler, feature_names=all_features, initial_state=sample_dict) # can be changed to rf_reg.predict(initial_scaled)[0]
+env = MMSEEnv(model=xgb_reg, scaler=scaler, feature_names=all_features, initial_state=sample_dict) 
 agent = QLearningAgent(actions=list(range(7)))
 
 print("Training the agent...")
@@ -107,6 +116,27 @@ action_map = {
 # Q-values
 state_key = agent.get_state_key(sample_dict)
 q_values = agent.q_table[state_key]
+
+# Plotting the Q-values 
+action_labels = [
+    "Do Nothing",        
+    "Improve Sleep",     
+    "Increase Activity", 
+    "Improve Diet",      
+    "Reduce Alcohol",   
+    "Manage BMI",       
+    "Quit Smoking"       
+]
+
+# Plot Q-values
+plt.figure(figsize=(10, 6))
+plt.bar(action_labels, q_values)
+plt.title("Q-Values for Sample Patient")
+plt.ylabel("Q-Value")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
 
 # Get top-k actions
 top_k = 3  # you can change this to show more or fewer

@@ -101,3 +101,4 @@ class QLearningAgent:
 
     def decay_epsilon(self):
         self.epsilon = max(self.epsilon * self.epsilon_decay, self.min_epsilon)
+        
